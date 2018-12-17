@@ -1,0 +1,85 @@
+#include<Siv3D.hpp>
+
+struct MoveCircle :Circle {
+	static constexpr double leave = 2;
+	static constexpr double move = 1;
+	static constexpr double approach = 1;
+	static constexpr double maxspeed = 100;
+	Vec2 vel;
+	double vision;
+	ColorF color = RandomColorF();
+
+	MoveCircle(const Circle& circle, const Vec2& vel, double vision)
+		:Circle(circle), vel(vel), vision(vision) {}
+	void update() {
+		const double delta = System::DeltaTime();
+
+		moveBy(vel*delta);
+		if (vel.lengthSq() > maxspeed*maxspeed)
+			vel.setLength(maxspeed);
+	}
+	void draw() const noexcept {
+		Circle::draw(color);
+		Line(center, center + Vec2(vel).setLength(r)).draw(2, Palette::Black);
+	}
+};
+
+struct MoveCircleAdapter {
+	using dataset_type = Array<MoveCircle>;
+	using point_type = Vec2;
+	using element_type = double;
+	static constexpr int32 Dimensions = 2;
+	static const element_type* GetPointer(const point_type& point) {
+		return &point.x;
+	}
+	static element_type GetElement(const dataset_type& dataset, size_t index, size_t dim) {
+		return dataset[index].center.elem(dim);
+	}
+	static element_type DistanceSq(const dataset_type& dataset, size_t index, const element_type* other) {
+		return dataset[index].center.distanceFromSq(other[0], other[1]);
+	}
+};
+
+void Main()
+{
+	Array<MoveCircle> circles;
+	KDTree<MoveCircleAdapter> kdtree(circles);
+
+	for (const auto i : step(30))
+		circles << MoveCircle(Circle(RandomVec2(Window::ClientRect()), 15), RandomVec2(50), 100);
+
+	while (System::Update()) {
+		if (MouseL.down())
+			circles << MoveCircle(Circle(Cursor::PosF(), 15), RandomVec2(50), 100);
+
+		for (auto&& i : circles)
+			i.update();
+		for (const auto& i : circles)
+			i.draw();
+
+		kdtree.rebuildIndex();
+
+		for (const auto i : step(circles.size())) {
+			Vec2 movesum{ 0,0 }, approachsum{ 0,0 };
+			const auto indexes = kdtree.radiusSearch(circles[i].center, circles[i].vision);
+			for (const auto j : indexes) {
+				if (i == j)
+					continue;
+				if (circles[i].center.distanceFromSq(circles[j].center) < 40 * 40)
+					circles[i].vel -= Vec2(circles[j].center - circles[i].center).setLength(circles[i].leave);
+				movesum += Vec2(circles[j].vel).setLength(1);
+				approachsum += Vec2(circles[j].center - circles[i].center).setLength(1);
+			}
+			if (!indexes.empty()) {
+				movesum /= indexes.size();
+				approachsum /= indexes.size();
+			}
+
+			circles[i].vel += movesum.setLength(circles[i].move);
+			circles[i].vel += approachsum.setLength(circles[i].approach);
+
+			if (!Window::ClientRect().stretched(-50).contains(circles[i]))
+				circles[i].vel -= (circles[i].center - Window::Center()).setLength(3);
+		}
+	}
+}
