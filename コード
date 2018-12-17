@@ -1,7 +1,7 @@
 #include<Siv3D.hpp>
 
 struct MoveCircle :Circle {
-	static constexpr double leave = 2;
+	static constexpr double leave = 1;
 	static constexpr double move = 1;
 	static constexpr double approach = 1;
 	static constexpr double maxspeed = 100;
@@ -70,9 +70,9 @@ void Main()
 				movesum += Vec2(circles[j].vel).setLength(1);
 				approachsum += Vec2(circles[j].center - circles[i].center).setLength(1);
 			}
-			if (!indexes.empty()) {
-				movesum /= indexes.size();
-				approachsum /= indexes.size();
+			if (indexes.size() >= 2) {
+				movesum /= (indexes.size() - 1);
+				approachsum /= (indexes.size() - 1);
 			}
 
 			circles[i].vel += movesum.setLength(circles[i].move);
